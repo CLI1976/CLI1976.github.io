@@ -393,9 +393,9 @@
                         
                         let commission = commissionTable[code] || 0;
                         
-                        // 如果來源別為 "E"，提成加成 1.5 倍
+                        // 如果來源別為 "E"，提成加成 1.2 倍
                         if (source === 'E') {
-                            commission *= 1.5;
+                            commission *= 1.2;
                         }
                         
                         doctorSalaries[doctor] += commission;
