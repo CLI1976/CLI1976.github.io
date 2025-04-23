@@ -372,6 +372,7 @@
                     const doctorSalaries = {};
                     const doctorDetails = {};
                     const unknownItems = new Set(); // 記錄無法對應的項目
+                    const sourceStats = {}; // 記錄來源別統計
                     
                     for (let i = 1; i < workData.length; i++) {
                         const row = workData[i];
@@ -384,6 +385,11 @@
                         if (!doctorSalaries[doctor]) {
                             doctorSalaries[doctor] = 0;
                             doctorDetails[doctor] = [];
+                        }
+                        
+                        // 來源別統計
+                        if (!sourceStats[source]) {
+                            sourceStats[source] = { count: 0, commission: 0 };
                         }
                         
                         // 檢查是否有對應的提成金額
@@ -399,6 +405,9 @@
                         }
                         
                         doctorSalaries[doctor] += commission;
+                        sourceStats[source].count++;
+                        sourceStats[source].commission += commission;
+                        
                         doctorDetails[doctor].push({
                             code: code,
                             source: source,
@@ -431,6 +440,20 @@
                         <p>總醫師人數：${Object.keys(doctorSalaries).length} 人</p>
                         <p>總薪資：${totalSalary.toLocaleString('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })}</p>
                     </div>`;
+                    
+                    // 顯示來源別統計
+                    html += `<div class="summary" style="background-color: #e8f5e9;">
+                        <h3>來源別分類</h3>`;
+                    
+                    // 按照來源別字母順序排序
+                    const sortedSources = Object.keys(sourceStats).sort();
+                    
+                    for (const source of sortedSources) {
+                        const stats = sourceStats[source];
+                        html += `<p>${source}: ${stats.count} 筆，佣金 ${stats.commission.toLocaleString('zh-TW', { maximumFractionDigits: 0 })} 元</p>`;
+                    }
+                    
+                    html += `</div>`;
                     
                     // 顯示無法對應的項目
                     if (unknownItems.size > 0) {
