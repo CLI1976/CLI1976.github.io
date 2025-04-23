@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>醫師薪資計算系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            justify-content: center;
+            align-items: stretch;
+        }
+        .upload-box {
+            flex: 1;
+            max-width: 400px;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .upload-box:hover {
+            border-color: #666;
+            background-color: #f9f9f9;
+        }
+        .upload-box h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .filename {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .paste-btn {
+            background-color: #2196F3;
+            font-size: 18px;
+            padding: 15px 30px;
+        }
+        .paste-btn:hover {
+            background-color: #1976D2;
+        }
+        #results {
+            margin-top: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+        }
+        .copy-btn {
+            background-color: #2196F3;
+            margin-left: 10px;
+        }
+        .copy-btn:hover {
+            background-color: #1976D2;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading.active {
+            display: block;
+        }
+        .paste-box {
+            background-color: #e3f2fd;
+            border-color: #2196F3;
+        }
+        .paste-box:hover {
+            background-color: #bbdefb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>醫師薪資計算系統</h1>
+        
+        <div class="upload-section">
+            <div class="upload-box paste-box" onclick="pasteFromClipboard()">
+                <h3>快速貼上</h3>
+                <button class="paste-btn">貼上工作細項</button>
+                <p>從剪貼簿貼上資料</p>
+                <div class="filename" id="pasteStatus"></div>
+            </div>
+            
+            <div class="upload-box" onclick="document.getElementById('workFile').click()">
+                <h3>檔案上傳</h3>
+                <p>或上傳檔案（CSV, TXT, Excel）</p>
+                <input type="file" id="workFile" style="display: none" accept=".csv,.txt,.xlsx,.xls">
+                <div class="filename" id="workFileName"></div>
+            </div>
+        </div>
+        
+        <div style="text-align: center">
+            <button id="calculateBtn" onclick="calculateSalary()" disabled>計算薪資</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            計算中，請稍候...
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // 內建的提成比例表（完整的 103 項）
+        const commissionTable = {
+            'E4012C': 40,
+            'X75-785': 187,
+            'X75-011M': 33,
+            'X75-990A': 1240,
+            'M27-224T': 177,
+            'X75-M04': 343,
+            'X75-M06': 344,
+            'X75-011': 30,
+            'X75-012': 30,
+            'X75-013': 30,
+            'X75-101': 30,
+            'X75-121': 30,
+            'X75-162': 54,
+            'X75-184': 30,
+            'X75-201': 54,
+            'X75-271': 30,
+            'X75-274': 30,
+            'X75-351': 38,
+            'X75-352': 68,
+            'X75-371': 38,
+            'X75-382': 68,
+            'X75-391': 38,
+            'X75-392': 68,
+            'X75-407': 68,
+            'X75-411': 38,
+            'X75-442': 38,
+            'X75-504': 54,
+            'X75-515': 54,
+            'X75-521': 30,
+            'X75-531': 54,
+            'X75-532': 54,
+            'X75-533': 54,
+            'X75-534': 54,
+            'X75-537': 54,
+            'X75-540': 30,
+            'X75-541': 30,
+            'X75-542': 30,
+            'X75-543': 30,
+            'X75-581': 54,
+            'X75-591': 54,
+            'X75-592': 30,
+            'X75-611': 54,
+            'X75-612': 54,
+            'X75-613': 54,
+            'X75-614': 54,
+            'X75-622': 95,
+            'X75-632': 225,
+            'X75-987': 975,
+            'X75-989': 1725,
+            'X75-991': 570,
+            'X75-992': 755,
+            'X75-M09': 108,
+            'X75-M10': 36,
+            'X75-M11': 36,
+            'X75-M12': 1170,
+            'X75-M13': 720,
+            'X75-M14': 975,
+            'X75-M15': 2475,
+            'X75-M18': 975,
+            'X75-M19': 720,
+            'X75-004EA': 2475,
+            'X75-006EA': 720,
+            'X75-M03': 1725,
+            'X75-M25': 2578,
+            'X75-661': 240,
+            'X75-681': 578,
+            'X75-701': 588,
+            'X75-736': 300,
+            'X75-760': 1728,
+            'X75-786': 1200,
+            'X75-896': 9240,
+            'X75-975': 90,
+            'X75-980': 200,
+            'X75-983': 1520,
+            'X75-999': 92,
+            'X75-721': 492,
+            'X75-731': 578,
+            'X75-781': 560,
+            'X75-784': 187,
+            'X75-009E': 203,
+            'X75-002ZA': 720,
+            'X75-M20': 3840,
+            'X75-915': 2880,
+            'X75-911': 2880,
+            'X75-898': 8800,
+            'X75-M02': 11436,
+            'X75-M08': 224,
+            'X75-745': 328,
+            'X75-412': 67.5,
+            'X75-452': 67.5,
+            'X75-451': 67.5,
+            'X75-014': 30,
+            'X75-539': 30,
+            'X75-422': 67.5,
+            'X75-103': 30,
+            'X75-616': 30,
+            'X75-421': 37.5,
+            'X75-231': 30,
+            'X75-M17': 45,
+            'X75-M23': 36,
+            'X75-852': 5400,
+            'X75-853': 2318.4,
+            'X75-M16': 45
+        };
+        
+        let workData = null;
+        
+        // 從剪貼簿貼上資料
+        async function pasteFromClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    // 解析貼上的文字資料
+                    Papa.parse(text, {
+                        delimiter: '\t',
+                        complete: function(results) {
+                            workData = results.data;
+                            document.getElementById('pasteStatus').innerHTML = 
+                                '<span class="success">✓ 已成功貼上資料</span>';
+                            checkReady();
+                        }
+                    });
+                }
+            } catch (err) {
+                document.getElementById('pasteStatus').innerHTML = 
+                    '<span class="error">無法讀取剪貼簿，請確認瀏覽器權限</span>';
+                console.error('剪貼簿讀取失敗:', err);
+            }
+        }
+        
+        // 處理檔案上傳
+        document.getElementById('workFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('workFileName').textContent = file.name;
+                const reader = new FileReader();
+                
+                reader.onload = function(event) {
+                    const data = event.target.result;
+                    
+                    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                        const workbook = XLSX.read(data, { type: 'binary' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        workData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    } else {
+                        Papa.parse(data, {
+                            delimiter: '\t',
+                            complete: function(results) {
+                                workData = results.data;
+                            }
+                        });
+                    }
+                    
+                    checkReady();
+                };
+                
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    reader.readAsBinaryString(file);
+                } else {
+                    reader.readAsText(file);
+                }
+            }
+        });
+        
+        // 檢查是否可以開始計算
+        function checkReady() {
+            const calculateBtn = document.getElementById('calculateBtn');
+            if (workData) {
+                calculateBtn.disabled = false;
+            }
+        }
+        
+        // 計算薪資
+        function calculateSalary() {
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('results').innerHTML = '';
+            
+            setTimeout(() => {
+                try {
+                    // 處理工作細項資料
+                    const headers = workData[0];
+                    const doctorIndex = headers.indexOf('醫師姓名');
+                    const codeIndex = headers.indexOf('檢查項目');
+                    const sourceIndex = headers.indexOf('來源別');
+                    
+                    if (doctorIndex === -1 || codeIndex === -1 || sourceIndex === -1) {
+                        throw new Error('找不到必要的欄位：醫師姓名、檢查項目、來源別');
+                    }
+                    
+                    // 計算每位醫師的薪資
+                    const doctorSalaries = {};
+                    const doctorDetails = {};
+                    const unknownItems = new Set(); // 記錄無法對應的項目
+                    
+                    for (let i = 1; i < workData.length; i++) {
+                        const row = workData[i];
+                        if (!row[doctorIndex]) continue;
+                        
+                        const doctor = row[doctorIndex].trim();
+                        const code = row[codeIndex].trim();
+                        const source = row[sourceIndex].trim();
+                        
+                        if (!doctorSalaries[doctor]) {
+                            doctorSalaries[doctor] = 0;
+                            doctorDetails[doctor] = [];
+                        }
+                        
+                        // 檢查是否有對應的提成金額
+                        if (!commissionTable.hasOwnProperty(code)) {
+                            unknownItems.add(code);
+                        }
+                        
+                        let commission = commissionTable[code] || 0;
+                        
+                        // 如果來源別為 "E"，提成加成 1.5 倍
+                        if (source === 'E') {
+                            commission *= 1.5;
+                        }
+                        
+                        doctorSalaries[doctor] += commission;
+                        doctorDetails[doctor].push({
+                            code: code,
+                            source: source,
+                            originalCommission: commissionTable[code] || 0,
+                            finalCommission: commission
+                        });
+                    }
+                    
+                    // 顯示結果
+                    let html = '<h2>薪資計算結果</h2>';
+                    html += '<button class="copy-btn" onclick="copyResults()">複製結果</button>';
+                    html += '<table id="resultTable">';
+                    html += '<thead><tr><th>醫師姓名</th><th>薪資總額</th><th>工作項目數</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    for (const [doctor, salary] of Object.entries(doctorSalaries)) {
+                        html += `<tr>
+                            <td>${doctor}</td>
+                            <td>${salary.toLocaleString('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })}</td>
+                            <td>${doctorDetails[doctor].length}</td>
+                        </tr>`;
+                    }
+                    
+                    html += '</tbody></table>';
+                    
+                    // 顯示總計
+                    const totalSalary = Object.values(doctorSalaries).reduce((sum, salary) => sum + salary, 0);
+                    html += `<div class="summary">
+                        <h3>總計</h3>
+                        <p>總醫師人數：${Object.keys(doctorSalaries).length} 人</p>
+                        <p>總薪資：${totalSalary.toLocaleString('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })}</p>
+                    </div>`;
+                    
+                    // 顯示無法對應的項目
+                    if (unknownItems.size > 0) {
+                        html += `<div class="summary" style="background-color: #fff3e0;">
+                            <h3>無法對應的檢查項目</h3>
+                            <p>以下檢查項目在提成表中找不到對應的金額：</p>
+                            <ul>`;
+                        
+                        for (const item of unknownItems) {
+                            html += `<li>${item}</li>`;
+                        }
+                        
+                        html += `</ul>
+                            <p>這些項目的提成金額均計為 0 元。</p>
+                        </div>`;
+                    }
+                    
+                    document.getElementById('results').innerHTML = html;
+                    
+                } catch (error) {
+                    document.getElementById('results').innerHTML = 
+                        `<div class="error">錯誤：${error.message}</div>`;
+                }
+                
+                document.getElementById('loading').classList.remove('active');
+            }, 100);
+        }
+        
+        // 複製結果到剪貼簿
+        function copyResults() {
+            const table = document.getElementById('resultTable');
+            let text = '';
+            
+            // 複製表頭
+            const headers = table.querySelectorAll('th');
+            text += Array.from(headers).map(th => th.textContent).join('\t') + '\n';
+            
+            // 複製內容
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                text += Array.from(cells).map(td => td.textContent).join('\t') + '\n';
+            });
+            
+            // 複製到剪貼簿
+            navigator.clipboard.writeText(text).then(() => {
+                alert('結果已複製到剪貼簿！');
+            }).catch(err => {
+                console.error('複製失敗：', err);
+                alert('複製失敗，請手動選擇複製');
+            });
+        }
+    </script>
+</body>
+</html>
